@@ -1469,6 +1469,7 @@ class PipelineController(object):
         pipeline_object._task = pipeline_task
         pipeline_object._nodes = {}
         pipeline_object._running_nodes = []
+        pipeline_object._version = pipeline_task._get_runtime_properties().get("version")
         try:
             pipeline_object._deserialize(pipeline_task._get_configuration_dict(cls._config_section), force=True)
         except Exception:
@@ -1484,6 +1485,11 @@ class PipelineController(object):
     def tags(self):
         # type: () -> List[str]
         return self._task.get_tags() or []
+
+    @property
+    def version(self):
+        # type: () -> str
+        return self._version
 
     def add_tags(self, tags):
         # type: (Union[Sequence[str], str]) -> None
@@ -2732,7 +2738,7 @@ class PipelineController(object):
                             self._final_failure[node.name] = True
 
                     completed_jobs.append(j)
-                    node.executed = node.job.task_id() if not node_failed else False
+                    node.executed = node.job.task_id() if not (node_failed or node.job.is_aborted()) else False
                     if j in launched_nodes:
                         launched_nodes.remove(j)
                     # check if we need to stop all running steps
@@ -3494,7 +3500,7 @@ class PipelineDecorator(PipelineController):
                         else:
                             self._final_failure[node.name] = True
                     completed_jobs.append(j)
-                    node.executed = node.job.task_id() if not node_failed else False
+                    node.executed = node.job.task_id() if not (node_failed or node.job.is_aborted()) else False
                     if j in launched_nodes:
                         launched_nodes.remove(j)
                     # check if we need to stop all running steps
@@ -4075,6 +4081,13 @@ class PipelineDecorator(PipelineController):
                     ):
                         _node.name = "{}_{}".format(_node_name, counter)
                         counter += 1
+                    # Copy callbacks to the replicated node
+                    if cls._singleton._pre_step_callbacks.get(_node_name):
+                        cls._singleton._pre_step_callbacks[_node.name] = cls._singleton._pre_step_callbacks[_node_name]
+                    if cls._singleton._post_step_callbacks.get(_node_name):
+                        cls._singleton._post_step_callbacks[_node.name] = cls._singleton._post_step_callbacks[_node_name]
+                    if cls._singleton._status_change_callbacks.get(_node_name):
+                        cls._singleton._status_change_callbacks[_node.name] = cls._singleton._status_change_callbacks[_node_name]
                     _node_name = _node.name
                     if _node.name not in cls._singleton._nodes:
                         cls._singleton._nodes[_node.name] = _node
@@ -4142,7 +4155,7 @@ class PipelineDecorator(PipelineController):
                         return task.artifacts[return_name].get(
                             deserialization_function=cls._singleton._artifact_deserialization_function
                         )
-                    return task.get_parameters(cast=True)[CreateFromFunction.return_section + "/" + return_name]
+                    return task.get_parameters(cast=True).get(CreateFromFunction.return_section + "/" + return_name)
 
                 return_w = [LazyEvalWrapper(
                     callback=functools.partial(result_wrapper, n),
@@ -4572,6 +4585,13 @@ class PipelineDecorator(PipelineController):
             _node.parents = (_node.parents or []) + [
                 x for x in cls._evaluated_return_values.get(tid, []) if x in leaves
             ]
+
+        if not cls._singleton._abort_running_steps_on_failure:
+            for parent in _node.parents:
+                if cls._singleton._nodes[parent].status in ["failed", "aborted", "skipped"]:
+                    _node.skip_job = True
+                    return
+
         for k, v in kwargs.items():
             if v is None or isinstance(v, (float, int, bool, six.string_types)):
                 _node.parameters["{}/{}".format(CreateFromFunction.kwargs_section, k)] = v

@@ -6,9 +6,11 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 from urllib3 import PoolManager
+import urllib3
 import six
 
 from .session.defs import ENV_HOST_VERIFY_CERT
+from ..backend_config.converters import strtobool
 
 if six.PY3:
     from functools import lru_cache
@@ -57,10 +59,21 @@ def urllib_log_warning_setup(total_retries=10, display_warning_after=5):
 
 class TLSv1HTTPAdapter(HTTPAdapter):
     def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
-        self.poolmanager = PoolManager(num_pools=connections,
-                                       maxsize=maxsize,
-                                       block=block,
-                                       ssl_version=ssl.PROTOCOL_TLSv1_2)
+        # noinspection PyBroadException
+        try:
+            if "ssl_minimum_version" in urllib3.poolmanager.SSL_KEYWORDS:
+                self.poolmanager = PoolManager(
+                    num_pools=connections, maxsize=maxsize, block=block, ssl_minimum_version=ssl.TLSVersion.TLSv1_2
+                )
+            else:
+                self.poolmanager = PoolManager(
+                    num_pools=connections, maxsize=maxsize, block=block, ssl_version=ssl.PROTOCOL_TLSv1_2
+                )
+        except AttributeError:
+            # just in case some attributes were not found in urrlib3 older versions
+            self.poolmanager = PoolManager(
+                num_pools=connections, maxsize=maxsize, block=block, ssl_version=ssl.PROTOCOL_TLSv1_2
+            )
 
 
 class SessionWithTimeout(requests.Session):
@@ -141,8 +154,14 @@ def get_http_session_with_retry(
     adapter = TLSv1HTTPAdapter(max_retries=retry, pool_connections=pool_connections, pool_maxsize=pool_maxsize)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
+
     # update verify host certificate
-    session.verify = ENV_HOST_VERIFY_CERT.get(default=config.get('api.verify_certificate', True))
+    verify = ENV_HOST_VERIFY_CERT.get(default=config.get('api.verify_certificate', True))
+    try:
+        session.verify = bool(strtobool(verify) if isinstance(verify, str) else verify)
+    except (ValueError, AttributeError):
+        session.verify = verify
+
     if not session.verify and __disable_certificate_verification_warning < 2:
         # show warning
         __disable_certificate_verification_warning += 1
