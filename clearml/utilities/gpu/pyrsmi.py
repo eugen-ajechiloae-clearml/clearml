@@ -31,7 +31,7 @@ import threading
 from enum import IntEnum, auto
 
 
-def get_device_uuids() -> list[str]:
+def get_device_uuids():
     """Get the UUIDs of all ROCm devices from rocminfo output,
         according to HSA spec.
     """
