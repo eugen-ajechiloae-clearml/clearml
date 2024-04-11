@@ -21,6 +21,7 @@ from datetime import datetime
 
 import psutil
 from ..gpu import pynvml as N
+from ..gpu import pyrsmi as R
 
 NOT_SUPPORTED = 'Not Supported'
 MB = 1024 * 1024
@@ -175,6 +176,64 @@ class GPUStatCollection(object):
         for pid in list(GPUStatCollection.global_processes.keys()):
             if not psutil.pid_exists(pid):
                 del GPUStatCollection.global_processes[pid]
+
+    @staticmethod
+    def _new_query_amd(shutdown=False, per_process_stats=False, get_driver_info=False):
+        initialized = False
+        if not GPUStatCollection._initialized:
+            R.smi_initialize()
+            GPUStatCollection._initialized = True
+            initialized = True
+
+        def get_gpu_info(index):
+            def get_process_info(process):
+                print(process)
+
+            if not GPUStatCollection._gpu_device_info.get(index):
+                uuid = R.smi_get_device_id(index)
+                name = R.smi_get_device_name(uuid)
+                GPUStatCollection._gpu_device_info[index] = (name, uuid)
+
+            name, uuid = GPUStatCollection._get_device_info[index]
+            
+            temperature = None  # no temperature querying available at the moment
+            fan_speed = None  # no fan speed querying available at the moment
+
+            try:
+                memory = R.smi_get_device_memory_total(uuid)
+            except Exception:
+                memory = None
+
+
+            try:
+                utilization = R.smi_get_device_utilization(uuid)
+            except Exception:
+                utilization = None
+            
+            try:
+                power = R.smi_get_device_average_power(uuid)
+            except Exception:
+                power = None
+
+            power_limit = None  # no power limit querying available at the moment
+
+            processes = []
+            if per_process_stats:
+                try:
+                    comp_processes = R.smi_get_device_compute_process()
+                except Exception:
+                    comp_processes = None
+
+                for comp_process in comp_processes:
+                    try:
+                        process = get_process_info(comp_process)
+                    except psutil.NoSuchProcess:
+                        process = None
+                    processes.append(process)
+
+        if shutdown and initialized:
+            R.smi_shutdown()
+            GPUStatCollection._initialized = False
 
     @staticmethod
     def new_query(shutdown=False, per_process_stats=False, get_driver_info=False):
