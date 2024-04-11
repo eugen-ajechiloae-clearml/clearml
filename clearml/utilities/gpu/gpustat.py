@@ -18,6 +18,7 @@ import json
 import platform
 import sys
 from datetime import datetime
+from ctypes import c_uint32, byref, c_int64
 
 import psutil
 from ..gpu import pynvml as N
@@ -186,41 +187,97 @@ class GPUStatCollection(object):
             initialized = True
 
         def get_gpu_info(index):
-            def get_process_info(process):
-                print(process)
+            def amd_query_processes():
+                num_procs = c_uint32()
+                ret = R.rocm_lib.rsmi_compute_process_info_get(None, byref(num_procs))
+                if R.rsmi_ret_ok(ret):
+                    buff_sz = num_procs.value + 10
+                    proc_info = (R.rsmi_process_info_t * buff_sz)()
+                    ret = R.rocm_lib.rsmi_compute_process_info_get(byref(proc_info), byref(num_procs))
+                    proc_info_list = (
+                        [proc_info[i] for i in range(num_procs.value)]
+                        if R.rsmi_ret_ok(ret)
+                        else []
+                    )
+                    # query VRAM usage explicitly, as rsmi_compute_process_info_get
+                    # doesn't actually return VRAM usage
+                    for proc_info in proc_info_list:
+                        vram_query_proc_info = R.rsmi_process_info_t()
+                        ret = R.rocm_lib.rsmi_compute_process_info_by_pid_get(
+                            int(proc_info.process_id), byref(vram_query_proc_info)
+                        )
+                        if not R.rsmi_ret_ok(ret):
+                            return []
+                        proc_info.vram_usage = vram_query_proc_info.vram_usage
+                    return proc_info_list
+                return []
+
+            def get_fan_speed():
+                fan_level = c_int64()
+                fan_max = c_int64()
+                sensor_ind = c_uint32(0)
+
+                ret = R.rocm_lib.rsmi_dev_fan_speed_get(index, sensor_ind, byref(fan_level))
+                if not R.rsmi_ret_ok(ret):
+                    return None
+
+                ret = R.rocm_lib.rsmi_dev_fan_speed_max_get(index, sensor_ind, byref(fan_max))
+                if not R.rsmi_ret_ok(ret):
+                    return None
+
+                if fan_level.value <= 0 or fan_max <= 0:
+                    return None
+                
+                return float(fan_level.value) / float(fan_max.value)
+
+            def get_process_info(comp_process):
+                process = {}
+                pid = comp_process.process_id
+                if pid not in GPUStatCollection.global_processes:
+                    GPUStatCollection.global_processes[pid] = psutil.Process(pid=pid)
+                process["pid"] = pid
+                try:
+                    process["gpu_memory_usage"] = comp_process.vram_usage // MB
+                except Exception:
+                    pass
+                return process
 
             if not GPUStatCollection._gpu_device_info.get(index):
                 uuid = R.smi_get_device_id(index)
                 name = R.smi_get_device_name(uuid)
                 GPUStatCollection._gpu_device_info[index] = (name, uuid)
 
-            name, uuid = GPUStatCollection._get_device_info[index]
+            name, uuid = GPUStatCollection._gpu_device_info[index]
             
-            temperature = None  # no temperature querying available at the moment
-            fan_speed = None  # no fan speed querying available at the moment
+            temperature = None  # TODO: fetch temperature. It is possible
+            fan_speed = get_fan_speed()
 
             try:
-                memory = R.smi_get_device_memory_total(uuid)
+                memory_total = R.smi_get_device_memory_total(index)
             except Exception:
-                memory = None
-
+                memory_total = None
 
             try:
-                utilization = R.smi_get_device_utilization(uuid)
+                memory_used = R.smi_get_device_memory_used(index)
+            except Exception:
+                memory_used = None
+
+            try:
+                utilization = R.smi_get_device_utilization(index)
             except Exception:
                 utilization = None
             
             try:
-                power = R.smi_get_device_average_power(uuid)
+                power = R.smi_get_device_average_power(index)
             except Exception:
                 power = None
 
-            power_limit = None  # no power limit querying available at the moment
+            power_limit = None  # TODO: find a way to fetch this
 
             processes = []
             if per_process_stats:
                 try:
-                    comp_processes = R.smi_get_device_compute_process()
+                    comp_processes = amd_query_processes()
                 except Exception:
                     comp_processes = None
 
@@ -231,9 +288,38 @@ class GPUStatCollection(object):
                         process = None
                     processes.append(process)
 
+            gpu_info = {
+                "index": index,
+                "uuid": uuid,
+                "name": name,
+                "temperature.gpu": temperature,
+                "fan.speed": fan_speed,
+                "utilization.gpu": utilization if utilization else None,
+                "power.draw": power if power is not None else None,
+                "enforced.power.limit": power_limit if power_limit is not None else None,
+                # Convert bytes into MBytes
+                "memory.used": memory_used // MB if memory_used else None,
+                "memory.total": memory_total // MB if memory_total else None,
+                "processes": None if (processes and all(p is None for p in processes)) else processes,
+            }
+            if per_process_stats:
+                GPUStatCollection.clean_processes()
+            return gpu_info
+
+        gpu_list = []
+        if GPUStatCollection._device_count is None:
+            GPUStatCollection._device_count = R.smi_get_device_count()
+
+        for index in range(GPUStatCollection._device_count):
+            gpu_info = get_gpu_info(index)
+            gpu_stat = GPUStat(gpu_info)
+            gpu_list.append(gpu_stat)
+
         if shutdown and initialized:
             R.smi_shutdown()
             GPUStatCollection._initialized = False
+
+        return GPUStatCollection(gpu_list, driver_version=None, driver_cuda_version=None)
 
     @staticmethod
     def new_query(shutdown=False, per_process_stats=False, get_driver_info=False):
