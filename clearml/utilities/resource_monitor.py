@@ -369,8 +369,8 @@ class ResourceMonitor(BackgroundMonitor):
             # only monitor the active gpu's, if none were selected, monitor everything
             if self._skip_nonactive_gpu(i, g):
                 continue
-            stats["gpu_%d_temperature" % i] = float(g["temperature.gpu"])
-            stats["gpu_%d_utilization" % i] = float(g["utilization.gpu"])
+            stats["gpu_%d_temperature" % i] = float(g["temperature.gpu"]) if g.get("temperature.gpu") else None
+            stats["gpu_%d_utilization" % i] = float(g["utilization.gpu"]) if g.get("utilization.gpu") else None
             stats["gpu_%d_mem_usage" % i] = 100. * float(g["memory.used"]) / float(g["memory.total"])
             # already in MBs
             stats["gpu_%d_mem_free_gb" % i] = float(g["memory.total"] - g["memory.used"]) / 1024
