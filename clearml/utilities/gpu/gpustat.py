@@ -288,9 +288,8 @@ class GPUStatCollection(object):
                         process = get_process_info(comp_process)
                     except psutil.NoSuchProcess:
                         print("no such process")
-                        process = None
-                        break
-                    processes.append(process)
+                    else:
+                        processes.append(process)
 
             gpu_info = {
                 "index": index,
