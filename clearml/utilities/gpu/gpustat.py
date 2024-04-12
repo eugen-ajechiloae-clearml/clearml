@@ -234,8 +234,9 @@ class GPUStatCollection(object):
             def get_process_info(comp_process):
                 process = {}
                 pid = comp_process.process_id
-                if pid not in GPUStatCollection.global_processes:
-                    GPUStatCollection.global_processes[pid] = psutil.Process(pid=pid)
+                # skip global_processes caching because PID querying seems to be inconsistent atm
+                # if pid not in GPUStatCollection.global_processes:
+                #     GPUStatCollection.global_processes[pid] = psutil.Process(pid=pid)
                 process["pid"] = pid
                 try:
                     process["gpu_memory_usage"] = comp_process.vram_usage // MB
@@ -250,7 +251,7 @@ class GPUStatCollection(object):
 
             name, uuid = GPUStatCollection._gpu_device_info[index]
             
-            temperature = None  # TODO: fetch temperature. It is possible
+            temperature = None  # TODO: fetch temperature. It should be possible
             fan_speed = get_fan_speed()
 
             try:
@@ -279,15 +280,14 @@ class GPUStatCollection(object):
             if per_process_stats:
                 try:
                     comp_processes = amd_query_processes()
-                except Exception as e:
-                    print("no comp processes")
+                except Exception:
                     comp_processes = []
-                print("comp processes", comp_processes)
                 for comp_process in comp_processes:
                     try:
                         process = get_process_info(comp_process)
                     except psutil.NoSuchProcess:
-                        print("no such process")
+                        # skip process caching for now
+                        pass
                     else:
                         processes.append(process)
 
