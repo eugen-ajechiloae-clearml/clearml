@@ -326,6 +326,9 @@ class GPUStatCollection(object):
 
     @staticmethod
     def new_query(shutdown=False, per_process_stats=False, get_driver_info=False):
+        return GPUStatCollection._new_query_amd(
+            shutdown=shutdown, per_process_stats=per_process_stats, get_driver_info=get_driver_info
+        )
         """Query the information of all the GPUs on local machine"""
         initialized = False
         if not GPUStatCollection._initialized:
