@@ -318,17 +318,19 @@ def smi_initialize():
     lib_load_lock.release()
 
 
-def rsmi_ret_ok(my_ret):
+def rsmi_ret_ok(my_ret, log_error=False):
     """ Returns true if RSMI call status is 0 (success)
 
     @param device: DRM device identifier
     @param my_ret: Return of RSMI call (rocm_smi_lib API)
+    @param log_error: Log the error message
     @param metric: Parameter of GPU currently being analyzed
     """
     if my_ret != rsmi_status_t.RSMI_STATUS_SUCCESS:
-        err_str = c_char_p()
-        rocm_lib.rsmi_status_string(my_ret, byref(err_str))
-        logging.error(err_str.value.decode())
+        if log_error:
+            err_str = c_char_p()
+            rocm_lib.rsmi_status_string(my_ret, byref(err_str))
+            logging.error(err_str.value.decode())
         return False
     return True
 

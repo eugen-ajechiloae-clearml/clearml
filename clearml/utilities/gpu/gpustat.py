@@ -218,11 +218,11 @@ class GPUStatCollection(object):
                 sensor_ind = c_uint32(0)
 
                 ret = R.rocm_lib.rsmi_dev_fan_speed_get(index, sensor_ind, byref(fan_level))
-                if not R.rsmi_ret_ok(ret):
+                if not R.rsmi_ret_ok(ret, log_error=False):
                     return None
 
                 ret = R.rocm_lib.rsmi_dev_fan_speed_max_get(index, sensor_ind, byref(fan_max))
-                if not R.rsmi_ret_ok(ret):
+                if not R.rsmi_ret_ok(ret, log_error=False):
                     return None
 
                 if fan_level.value <= 0 or fan_max <= 0:
