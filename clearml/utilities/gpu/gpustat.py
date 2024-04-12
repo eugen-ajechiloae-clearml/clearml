@@ -231,7 +231,7 @@ class GPUStatCollection(object):
                 return float(fan_level.value) / float(fan_max.value)
 
             def get_process_info(comp_process):
-                process = {}
+                process = {}None
                 pid = comp_process.process_id
                 if pid not in GPUStatCollection.global_processes:
                     GPUStatCollection.global_processes[pid] = psutil.Process(pid=pid)
@@ -266,7 +266,7 @@ class GPUStatCollection(object):
                 utilization = R.smi_get_device_utilization(index)
             except Exception:
                 utilization = None
-            
+
             try:
                 power = R.smi_get_device_average_power(index)
             except Exception:
@@ -278,14 +278,17 @@ class GPUStatCollection(object):
             if per_process_stats:
                 try:
                     comp_processes = amd_query_processes()
-                except Exception:
-                    comp_processes = None
-
+                except Exception as e:
+                    print("no comp processes")
+                    comp_processes = []
+                print("comp processes", comp_processes)
                 for comp_process in comp_processes:
                     try:
                         process = get_process_info(comp_process)
                     except psutil.NoSuchProcess:
+                        print("no such process")
                         process = None
+                        break
                     processes.append(process)
 
             gpu_info = {
