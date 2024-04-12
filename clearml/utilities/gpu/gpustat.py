@@ -190,10 +190,12 @@ class GPUStatCollection(object):
             def amd_query_processes():
                 num_procs = c_uint32()
                 ret = R.rocm_lib.rsmi_compute_process_info_get(None, byref(num_procs))
+                print("num procs", ret, num_procs)
                 if R.rsmi_ret_ok(ret):
                     buff_sz = num_procs.value + 10
                     proc_info = (R.rsmi_process_info_t * buff_sz)()
                     ret = R.rocm_lib.rsmi_compute_process_info_get(byref(proc_info), byref(num_procs))
+                    print("list", ret)
                     proc_info_list = (
                         [proc_info[i] for i in range(num_procs.value)]
                         if R.rsmi_ret_ok(ret)
@@ -206,6 +208,7 @@ class GPUStatCollection(object):
                         ret = R.rocm_lib.rsmi_compute_process_info_by_pid_get(
                             int(proc_info.process_id), byref(vram_query_proc_info)
                         )
+                        print("query vram", ret)
                         if not R.rsmi_ret_ok(ret):
                             return []
                         proc_info.vram_usage = vram_query_proc_info.vram_usage
