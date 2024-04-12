@@ -231,7 +231,7 @@ class GPUStatCollection(object):
                 return float(fan_level.value) / float(fan_max.value)
 
             def get_process_info(comp_process):
-                process = {}None
+                process = {}
                 pid = comp_process.process_id
                 if pid not in GPUStatCollection.global_processes:
                     GPUStatCollection.global_processes[pid] = psutil.Process(pid=pid)
