@@ -247,7 +247,7 @@ class GPUStatCollection(object):
 
             if not GPUStatCollection._gpu_device_info.get(index):
                 uuid = R.smi_get_device_id(index)
-                name = R.smi_get_device_name(uuid)
+                name = R.smi_get_device_name(index)
                 GPUStatCollection._gpu_device_info[index] = (name, uuid)
 
             name, uuid = GPUStatCollection._gpu_device_info[index]
