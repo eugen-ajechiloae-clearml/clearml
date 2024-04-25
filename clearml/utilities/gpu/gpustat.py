@@ -17,6 +17,7 @@ from __future__ import unicode_literals
 import json
 import platform
 import sys
+import subprocess
 from datetime import datetime
 from ctypes import c_uint32, byref, c_int64
 
@@ -228,7 +229,7 @@ class GPUStatCollection(object):
 
                 if fan_level.value <= 0 or fan_max <= 0:
                     return None
-                
+
                 return float(fan_level.value) / float(fan_max.value)
 
             def get_process_info(comp_process):
@@ -250,7 +251,7 @@ class GPUStatCollection(object):
                 GPUStatCollection._gpu_device_info[index] = (name, uuid)
 
             name, uuid = GPUStatCollection._gpu_device_info[index]
-            
+
             temperature = None  # TODO: fetch temperature. It should be possible
             fan_speed = get_fan_speed()
 
@@ -322,13 +323,41 @@ class GPUStatCollection(object):
             R.smi_shutdown()
             GPUStatCollection._initialized = False
 
-        return GPUStatCollection(gpu_list, driver_version=None, driver_cuda_version=None)
+        # noinspection PyProtectedMember
+        driver_version = GPUStatCollection._get_amd_driver_version() if get_driver_info else None
+
+        return GPUStatCollection(gpu_list, driver_version=driver_version, driver_cuda_version=None)
 
     @staticmethod
-    def new_query(shutdown=False, per_process_stats=False, get_driver_info=False):
-        return GPUStatCollection._new_query_amd(
-            shutdown=shutdown, per_process_stats=per_process_stats, get_driver_info=get_driver_info
-        )
+    def _get_amd_driver_version():
+        # make sure the program doesn't crash with something like a SEGFAULT when querying the driver version
+        try:
+            process = subprocess.Popen(["rocm-smi", "--showdriverversion", "--json"], stdout=subprocess.PIPE)
+            out, _ = process.communicate()
+            return json.loads(out)["system"]["Driver version"]
+        except Exception:
+            try:
+                process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        "from clearml.utilities.gpu.pyrsmi import smi_get_kernel_version, smi_initialize; "
+                        + "smi_initialize(); "
+                        + "print(smi_get_kernel_version())",
+                    ]
+                )
+                out, _ = process.communicate()
+                return out.strip()
+            except Exception:
+                return None
+
+    @staticmethod
+    def _running_in_amd_env():
+        # noinspection PyProtectedMember
+        return bool(R._find_lib_rocm())
+
+    @staticmethod
+    def _new_query_nvidia(shutdown=False, per_process_stats=False, get_driver_info=False):
         """Query the information of all the GPUs on local machine"""
         initialized = False
         if not GPUStatCollection._initialized:
@@ -513,6 +542,20 @@ class GPUStatCollection(object):
             GPUStatCollection._initialized = False
 
         return GPUStatCollection(gpu_list, driver_version=driver_version, driver_cuda_version=cuda_driver_version)
+
+    @staticmethod
+    def new_query(shutdown=False, per_process_stats=False, get_driver_info=False):
+        # noinspection PyProtectedMember
+        if GPUStatCollection._running_in_amd_env():
+            # noinspection PyProtectedMember
+            return GPUStatCollection._new_query_amd(
+                shutdown=shutdown, per_process_stats=per_process_stats, get_driver_info=get_driver_info
+            )
+        else:
+            # noinspection PyProtectedMember
+            return GPUStatCollection._new_query_nvidia(
+                shutdown=shutdown, per_process_stats=per_process_stats, get_driver_info=get_driver_info
+            )
 
     def __len__(self):
         return len(self.gpus)

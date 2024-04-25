@@ -101,9 +101,6 @@ RSMI_MAX_BUFFER_LENGTH = 256
 # Policy enums
 RSMI_MAX_NUM_FREQUENCIES = 32
 
-# UUIDs of all ROCm devices
-DEVICE_UUIDS = get_device_uuids()
-
 
 class rsmi_status_t(c_int):
     RSMI_STATUS_SUCCESS = 0x0
@@ -590,6 +587,7 @@ nv_fmt = f'GPU-{B4}-{B2}-{B2}-{B2}-{B6}'
 
 # UUID function
 def smi_get_device_uuid(dev, format='roc'):
+    DEVICE_UUIDS = get_device_uuids()
     """returns the UUID of the device"""
     assert dev < len(DEVICE_UUIDS), 'Device index out of range'
 
