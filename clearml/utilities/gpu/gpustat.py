@@ -296,9 +296,9 @@ class GPUStatCollection(object):
                 "index": index,
                 "uuid": uuid,
                 "name": name,
-                "temperature.gpu": temperature,
-                "fan.speed": fan_speed,
-                "utilization.gpu": utilization if utilization else None,
+                "temperature.gpu": temperature or 0,
+                "fan.speed": fan_speed or 0,
+                "utilization.gpu": utilization if utilization else 100,
                 "power.draw": power if power is not None else None,
                 "enforced.power.limit": power_limit if power_limit is not None else None,
                 # Convert bytes into MBytes
