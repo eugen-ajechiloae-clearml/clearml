@@ -296,14 +296,14 @@ class GPUStatCollection(object):
                 "index": index,
                 "uuid": uuid,
                 "name": name,
-                "temperature.gpu": temperature or 0,
-                "fan.speed": fan_speed or 0,
-                "utilization.gpu": utilization if utilization else 100,
-                "power.draw": power if power is not None else None,
-                "enforced.power.limit": power_limit if power_limit is not None else None,
+                "temperature.gpu": temperature if temperature is not None else 0,
+                "fan.speed": fan_speed if fan_speed is not None else 0,
+                "utilization.gpu": utilization if utilization is not None else 100,
+                "power.draw": power if power is not None else 0,
+                "enforced.power.limit": power_limit if power_limit is not None else 0,
                 # Convert bytes into MBytes
-                "memory.used": memory_used // MB if memory_used else None,
-                "memory.total": memory_total // MB if memory_total else None,
+                "memory.used": memory_used // MB if memory_used is not None else 0,
+                "memory.total": memory_total // MB if memory_total is not None else 100,
                 "processes": None if (processes and all(p is None for p in processes)) else processes,
             }
             if per_process_stats:
